@@ -1377,4 +1377,46 @@ Step 3 is non-optional — leaving `*` open means any site on the internet can c
 
 ---
 
+## §20 — Why Render, and what we'd pick if we were redoing it
+
+A natural interview question after seeing the Render URL spin up cold: *"Why use a host that goes down after inactivity?"* The answer matters less for the technical content and more for showing that the choice was **deliberate** rather than accidental.
+
+### 20.1 The honest defense
+
+> Render's free tier was the fastest path to a deployable Python container with a public URL — its blueprint model gave me infra-as-code (`render.yaml`) in the repo on day one. The 15-minute spindown is a free-tier UX cost, not a Render limitation; the same code runs without changes on a paid Render plan, on Fly.io's free tier, or anywhere else that takes a `uvicorn` start command. I made the cost/UX tradeoff explicit and chose to absorb the cold start for v1 rather than introduce a workaround like a wake-up cron.
+
+Two things this answer does well:
+
+1. **Frames the constraint as time-to-ship, not technical limitation.** The cold start is acknowledged, not hand-waved. The architecture isn't locked in.
+2. **Names the alternatives that were considered.** "I picked X" without "I considered Y, Z" reads as default thinking; naming the alternatives reads as actual thinking.
+
+### 20.2 Alternatives, ranked by what they optimize for
+
+| Host | Free tier behavior | Tradeoff vs Render |
+|---|---|---|
+| **Fly.io** | Machines suspend (not stop). ~250ms resume. | Better UX. More setup: Dockerfile, `fly.toml`, `flyctl` CLI. No git-push-to-deploy out of the box. |
+| **Railway** | $5/mo trial credit, then sleeps. | Smoothest DX after Render. Still spins down on free, just later. |
+| **Cloudflare Workers** | Always warm, generous free tier. | Doesn't fit — Workers don't run long-lived Python processes, and our SSE streaming agent loop assumes one. |
+| **Hugging Face Spaces** | Free, doesn't sleep on the right tier. | Built for ML demos; FastAPI works. Less professional-looking URL for a portfolio piece. |
+| **Self-host on a $4/mo VPS** | No spindown. | More ops work (TLS, systemd, updates). Real engineering, but slower to ship. |
+
+### 20.3 The "would I redo it" answer
+
+**Fly.io free tier** is the technically better pick: same Python container, ~250ms cold starts instead of 30–60s, no monthly cost. The only reason it wasn't first choice for v1 is setup time — Render's "click Blueprint" was 5 min vs Fly's 30 min (Dockerfile + `flyctl auth login` + `fly launch`). For a v1 demo, time-to-live mattered more than cold-start latency.
+
+If the cold start ever becomes a real complaint (interviewer hits the URL and waits 45s; a user actually shows up), the migration is small:
+
+1. Write a ~6-line Dockerfile (Python base image, copy code, `pip install`, `CMD uvicorn ...`).
+2. `flyctl launch` — generates `fly.toml`, deploys, returns a `*.fly.dev` URL.
+3. Update Vercel's `VITE_API_BASE` env var to the new URL → redeploy frontend.
+4. Update Fly's CORS env to include the Vercel URL.
+
+Probably one focused hour. The architecture (FastAPI + SSE + env-var-driven frontend) doesn't care which Linux box the container runs on.
+
+### 20.4 The lesson behind the lesson
+
+The transferable point: when you pick a tool with a known weakness, write down both **the weakness** and **what would change your mind**. "Render was right for v1, would migrate to Fly when cold-start becomes a complaint" is a stronger signal than "I'm using Render" — it says you've thought about the failure mode and have a planned response. That's the muscle interviewers look for, more than the specific host you picked.
+
+---
+
 *This file grows as the project does. Next sections (TBD): observability (structured logs on the backend, error tracking), and a "graph view" toggle for the timeline if there's time after deploy.*
