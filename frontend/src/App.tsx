@@ -18,8 +18,6 @@ export default function App() {
   );
   const abortRef = useRef<AbortController | null>(null);
 
-  const hasStarted = busy || events.length > 0;
-
   async function startRun(goal: string, keyOverride?: string) {
     abortRef.current?.abort();
     const ctrl = new AbortController();
@@ -78,7 +76,7 @@ export default function App() {
       </header>
 
       <main className="flex-1 w-full">
-        {!hasStarted && <Hero />}
+        <Hero />
 
         <section className="max-w-3xl w-full mx-auto px-6 pb-10">
           <GoalForm onSubmit={(g) => startRun(g)} busy={busy} />
@@ -106,14 +104,14 @@ export default function App() {
           <Timeline events={events} />
         </section>
 
-        {!hasStarted && <FeatureGrid />}
+        <FeatureGrid />
       </main>
 
       <footer className="border-t border-white/5 mt-auto">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between text-xs text-slate-500">
           <span className="flex items-center gap-2">
             <span className="relative flex h-2 w-2">
-              <span className={`absolute inline-flex h-full w-full rounded-full ${busy ? "bg-indigo-400 pulse-dot" : "bg-emerald-400"}`} />
+              <span className={`absolute inline-flex h-full w-full rounded-full ${busy ? "bg-emerald-400 pulse-dot" : "bg-emerald-400"}`} />
             </span>
             Glassbox v0.1
           </span>
@@ -126,7 +124,7 @@ export default function App() {
 
 function BrandMark() {
   return (
-    <div className="relative w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-fuchsia-500 flex items-center justify-center shadow-lg shadow-indigo-900/40">
+    <div className="relative w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-500 to-green-500 flex items-center justify-center shadow-lg shadow-emerald-900/40">
       <div className="w-3.5 h-3.5 rounded-sm bg-slate-950/60 backdrop-blur border border-white/30" />
     </div>
   );
@@ -135,7 +133,7 @@ function BrandMark() {
 function Hero() {
   return (
     <section className="max-w-3xl mx-auto px-6 pt-16 pb-10 sm:pt-24 sm:pb-14 text-center">
-      <p className="text-[11px] uppercase tracking-[0.22em] text-indigo-300/80 font-medium mb-5">
+      <p className="text-[11px] uppercase tracking-[0.22em] text-emerald-300/80 font-medium mb-5">
         Open-source agent observability
       </p>
       <h2 className="text-4xl sm:text-5xl md:text-6xl font-semibold tracking-tight leading-[1.05] text-slate-50">
@@ -194,9 +192,9 @@ function FeatureGrid() {
         {features.map((f) => (
           <div
             key={f.title}
-            className="glass-panel-soft p-5 hover:border-indigo-500/30 transition-colors"
+            className="glass-panel-soft p-5 hover:border-emerald-500/30 transition-colors"
           >
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-indigo-500/20 to-fuchsia-500/20 border border-white/10 flex items-center justify-center mb-3 text-indigo-300">
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-500/20 to-green-500/20 border border-white/10 flex items-center justify-center mb-3 text-emerald-300">
               <svg className="w-5 h-5" viewBox="0 0 24 24">
                 {f.icon}
               </svg>

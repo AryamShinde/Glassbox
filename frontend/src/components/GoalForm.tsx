@@ -20,20 +20,15 @@ export default function GoalForm({
       {/* outer glow halo */}
       <div
         aria-hidden
-        className="pointer-events-none absolute -inset-px rounded-2xl bg-gradient-to-r from-indigo-500/40 via-fuchsia-500/30 to-cyan-500/40 opacity-60 blur-lg"
+        className="pointer-events-none absolute -inset-px rounded-2xl bg-gradient-to-r from-emerald-500/40 via-green-500/30 to-lime-500/40 opacity-60 blur-lg"
       />
       <div className="relative glass-panel p-5 sm:p-6">
-        <div className="flex items-center justify-between mb-3">
-          <label
-            htmlFor="goal"
-            className="text-[11px] uppercase tracking-[0.18em] text-slate-400 font-medium"
-          >
-            Goal
-          </label>
-          <span className="text-[11px] text-slate-500 hidden sm:inline">
-            Press <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 font-mono text-[10px]">⌘ + Enter</kbd> to run
-          </span>
-        </div>
+        <label
+          htmlFor="goal"
+          className="block text-[11px] uppercase tracking-[0.18em] text-slate-400 font-medium mb-3"
+        >
+          Goal
+        </label>
 
         <textarea
           id="goal"
@@ -44,18 +39,15 @@ export default function GoalForm({
           }}
           rows={3}
           placeholder="e.g. What is the population of Tokyo, and what percent of Japan's total is that?"
-          className="w-full bg-slate-950/60 border border-slate-700/70 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-500 font-mono text-sm leading-relaxed resize-none transition focus:outline-none focus:border-indigo-500/60 focus-glow"
+          className="w-full bg-slate-950/60 border border-slate-700/70 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-500 font-mono text-sm leading-relaxed resize-none transition focus:outline-none focus:border-emerald-500/60 focus-glow"
           disabled={busy}
         />
 
-        <div className="flex items-center justify-between mt-4">
-          <p className="text-xs text-slate-500">
-            5 free runs/hour · or bring your own Groq key
-          </p>
+        <div className="flex items-center justify-end mt-4">
           <button
             type="submit"
             disabled={busy || !goal.trim()}
-            className="group relative inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-fuchsia-500 hover:from-indigo-400 hover:to-fuchsia-400 disabled:from-slate-700 disabled:to-slate-700 disabled:text-slate-400 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-900/40 transition-all hover:shadow-indigo-700/50 hover:-translate-y-0.5 disabled:shadow-none disabled:translate-y-0"
+            className="group relative inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-400 hover:to-green-400 disabled:from-slate-700 disabled:to-slate-700 disabled:text-slate-400 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-900/40 transition-all hover:shadow-emerald-700/50 hover:-translate-y-0.5 disabled:shadow-none disabled:translate-y-0"
           >
             {busy ? (
               <>
