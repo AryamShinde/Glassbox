@@ -1290,4 +1290,91 @@ Adding Redux/Zustand/Jotai would require a store, actions, selectors — all to 
 
 ---
 
-*This file grows as the project does. Next sections (TBD): deployment to Render/Fly (backend container, frontend static hosting, env-var wiring).*
+## §19 — Deployment: Render (backend) + Vercel (frontend)
+
+### 19.1 Why split hosts?
+
+Render and Vercel each shine at one half:
+
+- **Render** runs long-lived Python processes well — it speaks the "container with a port" model that FastAPI/uvicorn expects. Vercel's Python runtime is serverless (functions, not processes), and SSE streaming over a function-with-timeout is fragile. SSE is our wire format, so we need a real process.
+- **Vercel** is the no-fuss path for a Vite SPA: `git push` → CDN-cached static build with previews per branch. Render can host static sites too, but Vercel's DX wins for frontends.
+
+The one cost of splitting hosts is **CORS**: the frontend's origin (`*.vercel.app`) is different from the backend's (`*.onrender.com`), so the browser enforces CORS on every request. We already had `CORSMiddleware` from local dev; we just feed it the Vercel URL via `ALLOWED_ORIGINS`.
+
+### 19.2 The dev-vs-prod URL problem
+
+In dev we use **same-origin** URLs: the frontend calls `/run` and Vite's dev-server proxy forwards to `http://localhost:8000`. No CORS, no env var.
+
+In prod the backend lives at a different origin, so `/run` would resolve to the Vercel domain (404). The fix is a base-URL env var:
+
+```ts
+const resp = await fetch(`${import.meta.env.VITE_API_BASE ?? ""}/run`, ...);
+```
+
+- **Dev**: `VITE_API_BASE` is unset → `?? ""` → URL is `/run` → Vite proxy handles it. Unchanged behavior.
+- **Prod**: `VITE_API_BASE=https://glassbox-api.onrender.com` (set in Vercel project settings) → URL is the absolute backend URL. Browser sends a CORS preflight, backend responds with `Access-Control-Allow-Origin: <vercel url>`, request proceeds.
+
+**Why the `VITE_` prefix is mandatory**: Vite only inlines env vars that start with `VITE_` into the client bundle. Anything else stays server-side (and there *is* no server side in a static SPA, so it just disappears). This is a security guardrail — it stops you from accidentally shipping `DATABASE_URL` to every browser.
+
+**Why `import.meta.env` instead of `process.env`**: Vite is ESM-native and runs in the browser. `process` is a Node global; it doesn't exist in the browser bundle. `import.meta.env` is the standardized ESM way to expose build-time constants. Vite replaces `import.meta.env.VITE_API_BASE` with a string literal at build time — there's no runtime lookup.
+
+### 19.3 The `render.yaml` blueprint
+
+Render supports two configuration styles: dashboard clicks, or a `render.yaml` "Infrastructure as Code" blueprint checked into the repo. We chose the blueprint — the next deploy is a `git push`, not a memory test.
+
+Key fields:
+
+- `runtime: python` — Render auto-detects Python from `requirements.txt` but specifying it is explicit and survives if we ever add other files.
+- `rootDir: backend` — our repo is a monorepo (backend + frontend at root); `rootDir` tells Render to `cd backend` before running build/start. Without it, `pip install -r requirements.txt` would fail to find the file.
+- `startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT` — three things matter here:
+  - `0.0.0.0` (not `127.0.0.1`): bind on all interfaces. The default (`localhost`) only accepts connections from the same machine, and Render's load balancer is *not* on the same machine.
+  - `$PORT`: Render assigns the port at runtime via env var. Hardcoding `8000` would work on first boot and silently fail when Render reassigns the port.
+  - `app.main:app`: module path → FastAPI instance. This is why `app/__init__.py` exists.
+- `envVars` with `sync: false` — declares that `GROQ_API_KEY` and `ALLOWED_ORIGINS` are required, but their values are **not** stored in the YAML (which lives in git). They're set in the dashboard. Secrets in the repo is the most common how-did-our-key-leak story; `sync: false` is the guardrail.
+- `PYTHON_VERSION: 3.11.9` — pinned. Without a pin, Render uses whatever its default is, which drifts. We also write the same version into `runtime.txt` because some Render code paths still read it (belt + suspenders).
+
+### 19.4 The cold-start tradeoff on Render's free tier
+
+Render's free web service spins down after 15 minutes of inactivity. The next request takes ~30–60s to wake the container — uvicorn boot, Python import, model client init. For a personal demo this is fine; for anything user-facing, it's a UX problem.
+
+The mitigations, in order of escalation:
+
+1. **Accept it** + show a "starting up..." state in the UI on the first call. We're at this tier.
+2. **Cron a wake-up ping** every 10 min from a free service (UptimeRobot, GitHub Actions). Effectively keeps the dyno warm; mildly violates the spirit of the free tier.
+3. **Upgrade to Render's paid plan** ($7/mo) — no spindown.
+4. **Move to Fly.io** — their free tier keeps machines suspended (not stopped) and resumes in ~250ms.
+
+If the demo gets real traffic, (4) is the cleaner answer than (2).
+
+### 19.5 The `vercel.json` SPA-rewrite trick
+
+Vercel serves static files matching the URL path. A user navigating directly to `https://glassbox.vercel.app/` works (serves `index.html`), but as soon as we add client-side routes (`/runs/123`, `/about`), a refresh on those URLs would 404 — there's no `runs/123.html` on disk.
+
+The standard SPA fix:
+
+```json
+"rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+```
+
+This says: for any path, serve `/index.html`. The browser receives the SPA bundle, React Router (or whatever) reads `window.location` and renders the right view. It's a **rewrite**, not a redirect — the URL in the address bar is preserved.
+
+We don't have client-side routes yet, but adding the rewrite up-front costs nothing and saves a debugging session later. (And `framework: "vite"` triggers Vercel's Vite-specific build optimizations.)
+
+### 19.6 Deploy ordering (chicken-and-egg)
+
+The two services depend on each other's URLs:
+
+- Backend `ALLOWED_ORIGINS` needs the Vercel URL (for CORS).
+- Frontend `VITE_API_BASE` needs the Render URL (for fetch).
+
+The unblocking move:
+
+1. Deploy backend first with `ALLOWED_ORIGINS=*` (temporary). Get the Render URL.
+2. Set `VITE_API_BASE=<render-url>` in Vercel, deploy frontend. Get the Vercel URL.
+3. Set `ALLOWED_ORIGINS=<vercel-url>` in Render, redeploy. CORS is now tight.
+
+Step 3 is non-optional — leaving `*` open means any site on the internet can call our Groq-burning endpoint. The rate limiter helps, but origin-restricting is the cheap first defense.
+
+---
+
+*This file grows as the project does. Next sections (TBD): observability (structured logs on the backend, error tracking), and a "graph view" toggle for the timeline if there's time after deploy.*

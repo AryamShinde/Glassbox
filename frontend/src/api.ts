@@ -36,7 +36,7 @@ export async function* runAgent(
   };
   if (byoKey) headers["x-groq-key"] = byoKey;
 
-  const resp = await fetch("/run", {
+  const resp = await fetch(`${import.meta.env.VITE_API_BASE ?? ""}/run`, {
     method: "POST",
     headers,
     body: JSON.stringify({ goal }),
