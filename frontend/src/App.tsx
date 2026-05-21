@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RateLimitError, runAgent } from "./api";
 import GoalForm from "./components/GoalForm";
 import Timeline from "./components/Timeline";
@@ -6,6 +6,7 @@ import RateLimitBanner from "./components/RateLimitBanner";
 import type { AgentEvent, RateLimitedPayload } from "./types";
 
 const BYO_KEY_STORAGE = "glassbox.groqKey";
+const API_BASE = import.meta.env.VITE_API_BASE ?? "";
 
 export default function App() {
   const [events, setEvents] = useState<AgentEvent[]>([]);
@@ -16,7 +17,20 @@ export default function App() {
   const [byoKey, setByoKey] = useState<string | null>(
     () => localStorage.getItem(BYO_KEY_STORAGE),
   );
+  // Render's free tier sleeps after inactivity and the first request takes
+  // ~30-50s to wake. We ping /health on mount so that latency is eaten in the
+  // background, and tell the user we're waking it if they submit before the
+  // ping returns.
+  const [backendReady, setBackendReady] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    fetch(`${API_BASE}/health`, { signal: ctrl.signal })
+      .catch(() => {})
+      .finally(() => setBackendReady(true));
+    return () => ctrl.abort();
+  }, []);
 
   async function startRun(goal: string, keyOverride?: string) {
     abortRef.current?.abort();
@@ -101,6 +115,10 @@ export default function App() {
             </div>
           )}
 
+          {busy && events.length === 0 && (
+            <PendingStatus warming={!backendReady} />
+          )}
+
           <Timeline events={events} />
         </section>
 
@@ -126,6 +144,34 @@ function BrandMark() {
   return (
     <div className="relative w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-500 to-green-500 flex items-center justify-center shadow-lg shadow-emerald-900/40">
       <div className="w-3.5 h-3.5 rounded-sm bg-slate-950/60 backdrop-blur border border-white/30" />
+    </div>
+  );
+}
+
+function PendingStatus({ warming }: { warming: boolean }) {
+  return (
+    <div className="mt-6 glass-panel-soft p-4 flex items-center gap-3">
+      <svg className="w-4 h-4 animate-spin text-emerald-300 shrink-0" viewBox="0 0 24 24" fill="none" aria-hidden>
+        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.3" />
+        <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+      </svg>
+      <div className="text-sm text-slate-300 leading-snug">
+        {warming ? (
+          <>
+            <span className="font-medium text-slate-100">Waking the agent server…</span>{" "}
+            <span className="text-slate-400">
+              this app runs on a free Render instance that sleeps when idle — the first request can take up to ~50s. Hang tight.
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="font-medium text-slate-100">Working on your request…</span>{" "}
+            <span className="text-slate-400">
+              the agent is thinking — events will stream in here as soon as the model produces them.
+            </span>
+          </>
+        )}
+      </div>
     </div>
   );
 }
